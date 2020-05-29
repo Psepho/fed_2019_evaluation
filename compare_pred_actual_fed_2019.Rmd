@@ -1,0 +1,158 @@
+---
+title: "Comparing predicted to actual votes for the 2019 Federal election"
+author: "PsephoAnalytics"
+date: "`r Sys.Date()`"
+output:
+  html_document:
+    df_print: paged
+    css: psepho_styles.css
+---
+
+```{r setup, include = FALSE, echo = FALSE}
+library(tidyverse)
+library(magrittr)
+
+# Shapefiles --------------------------------------------------------------
+
+# Federal Electoral Districts shapefile
+shape_file_url <- "http://ftp.maps.canada.ca/pub/elections_elections/Electoral-districts_Circonscription-electorale/federal_electoral_districts_boundaries_2015/federal_electoral_districts_boundaries_2015_shp_en.zip"
+# download.file(shape_file_url,
+#               destfile = "data-raw/federal_electoral_districts_boundaries_2015_shp_en.zip", quiet = TRUE)
+unzip("data-raw/federal_electoral_districts_boundaries_2015_shp_en.zip", exdir="data-raw/federal_electoral_districts_boundaries_2015_shp_en")
+federal_shapefile <- sf::read_sf("data-raw/federal_electoral_districts_boundaries_2015_shp_en",
+                                 layer = "FED_CA_2_2_ENG") %>%
+  sf::st_transform(crs = "+init=epsg:4326")
+
+# Toronto boundaries
+# download.file("http://opendata.toronto.ca/gcc/voting_location_2018_wgs84.zip",
+#               destfile = "data-raw/voting_location_2018_wgs84.zip", quiet = TRUE)
+unzip("data-raw/voting_location_2018_wgs84.zip", exdir="data-raw/voting_location_2018_wgs84")
+toronto_locations <- sf::read_sf("data-raw/voting_location_2018_wgs84",
+                                 layer = "VOTING_LOCATION_2018_WGS84") %>%
+  sf::st_transform(crs = "+init=epsg:4326")
+
+to_electoral_districts <- federal_shapefile[toronto_locations,] %>% 
+  dplyr::mutate(
+    ENNAME = stringr::str_replace_all(utf8::as_utf8(ENNAME), "--", "\u2013")
+  )
+
+# Actuals --------------------------------------------------------------
+
+actuals_source <- "https://elections.ca/res/rep/off/ovr2019app/51/data_donnees/pollresults_resultatsbureauCanada.zip"
+# download.file(actuals_source,
+#               destfile = "data-raw/pollresults_resultatsbureauCanada.zip", quiet = TRUE)
+unzip("data-raw/pollresults_resultatsbureauCanada.zip", exdir="data-raw/pollresults")
+on_files <- list.files(path = "data-raw/pollresults",
+                       pattern = "pollresults_resultatsbureau35[[:digit:]]{3}.csv",
+                       full.names = TRUE)
+federal_results <- do.call("rbind", lapply(on_files, function(.file){readr::read_csv(.file)}))
+# Encoding changes across files
+names(federal_results) <- iconv(names(federal_results),"WINDOWS-1252","UTF-8")
+# Header names change slightly across years, these work, so far
+federal_results <- dplyr::select(federal_results, contains("Family"), contains("First"),
+                                 contains("Votes"), matches("Affiliation.*English"),
+                                 contains("District Number"), contains("Polling Station Number"), contains("Incumbent"))
+names(federal_results) <- c("last", "first", "votes", "party", "district", "poll", "incumbent")
+federal_results <- dplyr::transmute(federal_results,
+                                    candidate = as.factor(stringr::str_c(federal_results$last,
+                                                                         federal_results$first ,
+                                                                         sep = " ")),
+                                    year = 2019,
+                                    type = "federal",
+                                    votes = as.integer(federal_results$votes),
+                                    party = as.character(federal_results$party),
+                                    district = as.character(federal_results$district),
+                                    poll = as.character(federal_results$poll),
+                                    incumbent = as.logical(ifelse(federal_results$incumbent == "Y", 1, 0))
+) %>% 
+  dplyr::mutate(party = 
+                  forcats::fct_recode(party,
+                                      NDP = "NDP-New Democratic Party"),
+                party = fct_other(party, keep = c("Liberal", "Conservative", "NDP", "Green Party"))
+  )
+
+actuals <- federal_results %>% 
+  dplyr::group_by(district, party) %>% 
+  dplyr::summarise(votes = sum(votes)) %>% 
+  dplyr::filter(party != "Other") %>% 
+  tidyr::pivot_wider(names_from = party, values_from = votes) %>% 
+  dplyr::mutate(total_votes = sum(Conservative, `Green Party`, Liberal, NDP)) %>% 
+  dplyr::mutate(Conservative = Conservative / total_votes,
+                `Green Party` = `Green Party` / total_votes,
+                Liberal = Liberal / total_votes,
+                NDP = NDP / total_votes
+                ) %>% 
+  dplyr::select(-total_votes) %>% 
+  tidyr::pivot_longer(cols = -district, 
+                      names_to = "party",
+                      values_to = "actual_share") %>% 
+  dplyr::mutate(party = forcats::as_factor(party))
+
+# Predicted --------------------------------------------------------------
+
+predictions <- readxl::read_excel("Polls - October 16.xlsx") %>% 
+  dplyr::rename(riding = `...2`) %>% 
+  dplyr::select(-`...1`) %>% 
+  tidyr::pivot_longer(cols = c("LIB", "CON", "NDP", "GP_"), 
+                      names_to = "party", 
+                      values_to = "predicted_share") %>% 
+  dplyr::mutate(party = forcats::as_factor(party)) %>% 
+  dplyr::mutate(party = 
+                  forcats::fct_recode(party,
+                                      Liberal = "LIB",
+                                      Conservative = "CON",
+                                      `Green Party` = "GP_"
+                  )
+  )
+
+
+predictions <- dplyr::left_join(to_electoral_districts, predictions, by = c("ENNAME" = "riding")) %>%
+  dplyr::rename(district = FED_NUM) %>% 
+  dplyr::select(district, party, predicted_share)
+
+predictions %<>%  dplyr::mutate(district = as.character(predictions$district))
+
+# Combined results --------------------------------------------------------------
+
+results <- dplyr::left_join(predictions, actuals) %>% 
+  dplyr::mutate(difference = predicted_share - actual_share)
+
+```
+
+
+Our [predictions](http://www.psephoanalytics.ca/2019/10/using-our-agent-based-model-to-scenario.html) for the 2019 Federal race in Toronto were generated by our agent-based model that used demographic characteristics and results from previous elections.
+
+Now that the [final results](https://elections.ca/content.aspx?section=ele&document=index&dir=pas/43ge&lang=e) are available, we can see how our predictions performed at the Electoral District level.
+
+For this analysis, we restrict the comparison to just the major parties, as they were the only parties for which we estimated vote share. We also just compare the actual results from the predictions of our base scenario. In the future, our work will focus much more on scenario planning to explain political campaigns. 
+
+We start by just plotting the difference between the actual votes and the predicted votes at the party and district level.
+
+```{r histogram, fig.cap="Distribution of the difference between the predicted and actual proportion of votes for all parties.", message = FALSE, warning = FALSE, echo = FALSE}
+ggplot2::ggplot(data = results, ggplot2::aes(difference)) +
+  ggplot2::geom_histogram() +
+  ggplot2::geom_vline(xintercept = 0, color = "orange", size = 2) +
+  ggplot2::xlab("Difference from actual results") +
+  ggplot2::scale_x_continuous(labels = scales::percent) +
+  ggplot2::ylab("") +
+  ggplot2::annotate("text", x = 0.1, y = 10, label = "Overestimated") +
+  ggplot2::annotate("text", x = -0.1, y = 10, label = "Underestimated")
+```
+
+The mean absolute value of differences from the actual results is `r scales::percent(mean(abs(results$difference), na.rm = TRUE), accuracy = 0.1)`. In addition, the median value of the differences is `r scales::percent(median(results$difference, na.rm = TRUE), accuracy = 0.01)`, which means that we slightly overestimated support for parties. However, as the histogram shows, there is significant variation in this difference across districts. Our highest overestimation was `r scales::percent(max(results$difference, na.rm = TRUE), accuracy = 0.1)` and lowest underestimation was `r scales::percent(min(results$difference, na.rm = TRUE), accuracy = 0.1)`.
+
+To better understand this variation, we can look at a plot of the geographical distribution of the differences. In this figure, we show each party separately to illuminate the geographical structure of the differences.
+
+```{r map, fig.cap="The distribution of the difference between the predicted and actual proportion of votes by Electoral District and party.", message = FALSE, warning = FALSE, echo = FALSE}
+ggplot2::ggplot(data = results) +
+  ggplot2::geom_sf(ggplot2::aes(fill = ggplot2::cut_interval(difference, 5))) +
+  ggplot2::facet_wrap(~party) +
+  ggplot2::scale_fill_brewer("Differences", palette = "YlOrBr", labels=c("Underestimate", "", "", "", "Overestimate")) +
+  ggplot2::theme(panel.background = ggplot2::element_blank(),
+                 axis.text = ggplot2::element_blank(),
+                 axis.ticks = ggplot2::element_blank())
+```
+
+The overall distribution of differences doesn't have a clear geographical bias. In some sense, this is good, as it shows our agent-based model isn't systematically biased to any particular Electoral District. 
+
+However, our model does appear to generally overestimate NDP support while underestimating Liberal support. These slight biases are important indicators for us in recalibrating the model.
