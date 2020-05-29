@@ -3,3 +3,7 @@
 .RData
 .Ruserdata
 .DS_Store
+*.html
+data-raw/pollresults*
+data-raw/fed*
+data-raw/voting*

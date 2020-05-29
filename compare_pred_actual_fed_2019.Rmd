@@ -16,16 +16,16 @@ library(magrittr)
 
 # Federal Electoral Districts shapefile
 shape_file_url <- "http://ftp.maps.canada.ca/pub/elections_elections/Electoral-districts_Circonscription-electorale/federal_electoral_districts_boundaries_2015/federal_electoral_districts_boundaries_2015_shp_en.zip"
-# download.file(shape_file_url,
-#               destfile = "data-raw/federal_electoral_districts_boundaries_2015_shp_en.zip", quiet = TRUE)
+download.file(shape_file_url,
+              destfile = "data-raw/federal_electoral_districts_boundaries_2015_shp_en.zip", quiet = TRUE)
 unzip("data-raw/federal_electoral_districts_boundaries_2015_shp_en.zip", exdir="data-raw/federal_electoral_districts_boundaries_2015_shp_en")
 federal_shapefile <- sf::read_sf("data-raw/federal_electoral_districts_boundaries_2015_shp_en",
                                  layer = "FED_CA_2_2_ENG") %>%
   sf::st_transform(crs = "+init=epsg:4326")
 
 # Toronto boundaries
-# download.file("http://opendata.toronto.ca/gcc/voting_location_2018_wgs84.zip",
-#               destfile = "data-raw/voting_location_2018_wgs84.zip", quiet = TRUE)
+download.file("http://opendata.toronto.ca/gcc/voting_location_2018_wgs84.zip",
+              destfile = "data-raw/voting_location_2018_wgs84.zip", quiet = TRUE)
 unzip("data-raw/voting_location_2018_wgs84.zip", exdir="data-raw/voting_location_2018_wgs84")
 toronto_locations <- sf::read_sf("data-raw/voting_location_2018_wgs84",
                                  layer = "VOTING_LOCATION_2018_WGS84") %>%
@@ -39,8 +39,8 @@ to_electoral_districts <- federal_shapefile[toronto_locations,] %>%
 # Actuals --------------------------------------------------------------
 
 actuals_source <- "https://elections.ca/res/rep/off/ovr2019app/51/data_donnees/pollresults_resultatsbureauCanada.zip"
-# download.file(actuals_source,
-#               destfile = "data-raw/pollresults_resultatsbureauCanada.zip", quiet = TRUE)
+download.file(actuals_source,
+              destfile = "data-raw/pollresults_resultatsbureauCanada.zip", quiet = TRUE)
 unzip("data-raw/pollresults_resultatsbureauCanada.zip", exdir="data-raw/pollresults")
 on_files <- list.files(path = "data-raw/pollresults",
                        pattern = "pollresults_resultatsbureau35[[:digit:]]{3}.csv",
@@ -90,7 +90,7 @@ actuals <- federal_results %>%
 
 # Predicted --------------------------------------------------------------
 
-predictions <- readxl::read_excel("Polls - October 16.xlsx") %>% 
+predictions <- readxl::read_excel("data-raw/Polls - October 16.xlsx") %>% 
   dplyr::rename(riding = `...2`) %>% 
   dplyr::select(-`...1`) %>% 
   tidyr::pivot_longer(cols = c("LIB", "CON", "NDP", "GP_"), 
