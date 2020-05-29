@@ -124,9 +124,9 @@ Our [predictions](http://www.psephoanalytics.ca/2019/10/using-our-agent-based-mo
 
 Now that the [final results](https://elections.ca/content.aspx?section=ele&document=index&dir=pas/43ge&lang=e) are available, we can see how our predictions performed at the Electoral District level.
 
-For this analysis, we restrict the comparison to just the major parties, as they were the only parties for which we estimated vote share. We also just compare the actual results from the predictions of our base scenario. In the future, our work will focus much more on scenario planning to explain political campaigns. 
+For this analysis, we restrict the comparison to just the major parties, as they were the only parties for which we estimated vote share. We also only compare the actual results to the predictions of our base scenario. In the future, our work will focus much more on scenario planning to explain political campaigns. 
 
-We start by just plotting the difference between the actual votes and the predicted votes at the party and district level.
+We start by plotting the difference between the actual votes and the predicted votes at the party and district level.
 
 ```{r histogram, fig.cap="Distribution of the difference between the predicted and actual proportion of votes for all parties.", message = FALSE, warning = FALSE, echo = FALSE}
 ggplot2::ggplot(data = results, ggplot2::aes(difference)) +
@@ -135,8 +135,8 @@ ggplot2::ggplot(data = results, ggplot2::aes(difference)) +
   ggplot2::xlab("Difference from actual results") +
   ggplot2::scale_x_continuous(labels = scales::percent) +
   ggplot2::ylab("") +
-  ggplot2::annotate("text", x = 0.1, y = 10, label = "Overestimated") +
-  ggplot2::annotate("text", x = -0.1, y = 10, label = "Underestimated")
+  ggplot2::annotate("text", x = 0.1, y = 10.5, label = "Overestimated") +
+  ggplot2::annotate("text", x = -0.1, y = 10.5, label = "Underestimated")
 ```
 
 The mean absolute value of differences from the actual results is `r scales::percent(mean(abs(results$difference), na.rm = TRUE), accuracy = 0.1)`. In addition, the median value of the differences is `r scales::percent(median(results$difference, na.rm = TRUE), accuracy = 0.01)`, which means that we slightly overestimated support for parties. However, as the histogram shows, there is significant variation in this difference across districts. Our highest overestimation was `r scales::percent(max(results$difference, na.rm = TRUE), accuracy = 0.1)` and lowest underestimation was `r scales::percent(min(results$difference, na.rm = TRUE), accuracy = 0.1)`.
@@ -156,3 +156,5 @@ ggplot2::ggplot(data = results) +
 The overall distribution of differences doesn't have a clear geographical bias. In some sense, this is good, as it shows our agent-based model isn't systematically biased to any particular Electoral District. 
 
 However, our model does appear to generally overestimate NDP support while underestimating Liberal support. These slight biases are important indicators for us in recalibrating the model.
+
+Overall, we're very happy with an error of around 5%. As [described earlier](http://www.psephoanalytics.ca/2019/10/using-agent-based-modeling-to-explain.html), our primary objective is to explain political campaigns. Having accurate predictions is useful to this objective, but isn't the primary concern. Rather, we're much more interested in using the model that we've built for exploring different scenarios and helping to design political campaigns. 
